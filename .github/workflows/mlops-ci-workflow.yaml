@@ -30,4 +30,6 @@ jobs:
 
       - name: Run tests
         run: |
-          python -m pytest tests/ -v
+          python --version
+          python -m pytest --version
+          python -m pytest tests/ -v -s
