@@ -1,4 +1,3 @@
-
 name: MLOps CI Workflow
 
 on:
@@ -28,7 +27,13 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
 
+      - name: Collect tests (debug)
+        run: |
+          python -m pytest tests/ --collect-only -q
+
       - name: Run tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python --version
           python -m pytest --version
