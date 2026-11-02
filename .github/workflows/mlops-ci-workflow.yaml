@@ -14,21 +14,30 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          path: .
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
+      - name: Debug workspace
+        run: |
+          echo "Current directory:"
+          pwd
+          echo "Directory contents:"
+          ls -la
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r house-price-predictor/requirements.txt
+          pip install -r requirements.txt
           pip install pytest
 
       - name: Collect tests (debug)
         run: |
-          python -m pytest house-price-predictor/tests/ --collect-only -q
+          python -m pytest tests/ --collect-only -q
         continue-on-error: true
 
       - name: Run tests
@@ -37,5 +46,5 @@ jobs:
         run: |
           python --version
           python -m pytest --version
-          python -m pytest house-price-predictor/tests/ -v -s
+          python -m pytest tests/ -v -s
         continue-on-error: true
