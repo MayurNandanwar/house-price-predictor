@@ -21,24 +21,21 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        working-directory: house-price-predictor
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r house-price-predictor/requirements.txt
           pip install pytest
 
       - name: Collect tests (debug)
-        working-directory: house-price-predictor
         run: |
-          python -m pytest tests/ --collect-only -q
+          python -m pytest house-price-predictor/tests/ --collect-only -q
         continue-on-error: true
 
       - name: Run tests
-        working-directory: house-price-predictor
         env:
-          PYTHONPATH: ${{ github.workspace }}/house-price-predictor
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python --version
           python -m pytest --version
-          python -m pytest tests/ -v -s
+          python -m pytest house-price-predictor/tests/ -v -s
         continue-on-error: true
