@@ -11,9 +11,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: house-price-predictor
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -24,17 +21,20 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
+        working-directory: house-price-predictor
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest
 
       - name: Collect tests (debug)
+        working-directory: house-price-predictor
         run: |
           python -m pytest tests/ --collect-only -q
         continue-on-error: true
 
       - name: Run tests
+        working-directory: house-price-predictor
         env:
           PYTHONPATH: ${{ github.workspace }}/house-price-predictor
         run: |
