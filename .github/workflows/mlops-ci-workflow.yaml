@@ -11,7 +11,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    working-directory: house-price-predictor
+    defaults:
+      run:
+        working-directory: house-price-predictor
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
