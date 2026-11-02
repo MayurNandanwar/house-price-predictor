@@ -30,11 +30,24 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-cov
 
-      - name: Run tests
+      - name: Run Data Processing
         run: |
-          python -m pytest tests/ -v --tb=short 2>/dev/null || echo "No tests found or tests directory missing"
+          python src/data/run_processing.py \
+          --input data/row/house_data.csv \
+          --output data/processed/cleaned_house_data.csv
 
-      - name: Run linting (optional)
+      - name: Do Feature Engineering
         run: |
-          pip install flake8
-          flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics || true
+          python src/features/engineer.py \
+          --input data/processed/cleaned_house_data.csv \
+          --output data/features/featured_house_data.csv \
+          --preprocessor models/preprocessor.pkl
+
+
+      - name: Model Training
+        run: |
+          python src/models/train_model.py \
+          --config configs/model_config.yaml \
+          --data data/processed/featured_house_data.csv \
+          --models-dir models \
+          --mlflow-tracking-uri http://localhost:5555
