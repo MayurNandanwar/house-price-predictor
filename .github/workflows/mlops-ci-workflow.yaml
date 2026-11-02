@@ -45,6 +45,8 @@ jobs:
 
 
       - name: Model Training
+        env:
+          MLFLOW_ALLOW_FILE_STORE: 'true'
         run: |
           python src/models/train_model.py \
           --config configs/model_config.yaml \
