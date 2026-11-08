@@ -156,10 +156,10 @@ jobs:
         test -f src/api/Dockerfile
 
         # Build Docker image
-        docker build -t ghcr.io/house-price-model:$COMMIT_HASH -f src/api/Dockerfile .
+        docker build -t ghcr.io/$GITHUB_USERNAME/house-price-model:$COMMIT_HASH -f src/api/Dockerfile .
 
         # Run Docker container
-        docker run -d -p 8000:8000 --name test-api ghcr.io/house-price-model:$COMMIT_HASH
+        docker run -d -p 8000:8000 --name test-api ghcr.io/$GITHUB_USERNAME/house-price-model:$COMMIT_HASH
 
         # Check API health
         for i in {1..10}; do
@@ -179,7 +179,7 @@ jobs:
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
      
     - name: Push Docker image to GHCR
       run: |
