@@ -1,0 +1,1 @@
+workflow_dispatch: allows you to create or setup manual trigger.
