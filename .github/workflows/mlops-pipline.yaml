@@ -154,10 +154,10 @@ jobs:
         GITHUB_USERNAME=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
 
         # Build Docker image
-        docker build -t ghcr.io/house-price-model:$COMMIT_HASH -f ./src/api/Dockerfile .
+        docker build -t ghcr.io/$GITHUB_USERNAME/house-price-model:$COMMIT_HASH -f ./src/api/Dockerfile .
 
         # Run Docker container
-        docker run -d -p 8000:8000 --name test-api ghcr.io/house-price-model:$COMMIT_HASH
+        docker run -d -p 8000:8000 --name test-api ghcr.io/$GITHUB_USERNAME/house-price-model:$COMMIT_HASH
 
         # Check API health
         for i in {1..10}; do
@@ -187,10 +187,10 @@ jobs:
         GITHUB_USERNAME=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
 
         # Tag image as latest
-        docker tag ghcr.io/house-price-model:$COMMIT_HASH ghcr.io/house-price-model:latest
+        docker tag ghcr.io/$GITHUB_USERNAME/house-price-model:$COMMIT_HASH ghcr.io/$GITHUB_USERNAME/house-price-model:latest
 
         # Push commit-specific image
-        docker push ghcr.io/house-price-model:$COMMIT_HASH
+        docker push ghcr.io/$GITHUB_USERNAME/house-price-model:$COMMIT_HASH
 
         # Push latest image
-        docker push ghcr.io/house-price-model:latest
+        docker push ghcr.io/$GITHUB_USERNAME/house-price-model:latest
