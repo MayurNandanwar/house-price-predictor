@@ -1,6 +1,4 @@
 
-# .github/workflows/mlops-pipeline.yml
-
 name: MLOps Pipeline
 
 on:
@@ -18,25 +16,25 @@ on:
       run_all:
         description: 'Run all jobs'
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
       run_data_processing:
         description: 'Run data processing job'
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
       run_model_training:
         description: 'Run model training job'
         required: false
-        default: 'true'
+        default: true
         type: boolean
 
       run_build_and_publish:
         description: 'Run build and publish job'
         required: false
-        default: 'true'
+        default: true
         type: boolean
 
   release:
@@ -46,11 +44,16 @@ permissions:
   contents: read
   packages: write
 
+env:
+  PYTHON_VERSION: '3.11'
+  DOCKER_USERNAME: YOUR_DOCKER_USERNAME
+  IMAGE_NAME: house-price-model
+
 jobs:
 
-  # -----------------------------------------
+  # =========================================
   # JOB 1: DATA PROCESSING
-  # -----------------------------------------
+  # =========================================
 
   data-processing:
     runs-on: ubuntu-latest
@@ -62,7 +65,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
         run: |
@@ -96,9 +99,9 @@ jobs:
           path: models/trained/preprocessor.pkl
 
 
-  # -----------------------------------------
+  # =========================================
   # JOB 2: MODEL TRAINING
-  # -----------------------------------------
+  # =========================================
 
   model-training:
     needs: data-processing
@@ -111,7 +114,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install dependencies
         run: |
@@ -175,15 +178,14 @@ jobs:
           docker rm mlflow-server || true
 
 
-  # -----------------------------------------
+  # =========================================
   # JOB 3: BUILD AND PUBLISH DOCKER IMAGE
-  # -----------------------------------------
+  # =========================================
 
   build-and-publish:
     needs: model-training
     runs-on: ubuntu-latest
 
-    # Do not publish images during pull requests.
     if: |
       github.event_name == 'push' ||
       github.event_name == 'release' ||
@@ -219,7 +221,7 @@ jobs:
           echo "API directory:"
           ls -la src/api/
 
-          echo "Dockerfile:"
+          echo "Finding Dockerfile:"
           find . -type f -iname 'Dockerfile'
 
           test -f src/api/Dockerfile || {
@@ -234,14 +236,12 @@ jobs:
         run: |
           COMMIT_HASH=$(echo "${{ github.sha }}" | cut -c1-7)
 
-          GITHUB_USERNAME=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE=ghcr.io/${DOCKER_USERNAME}/${IMAGE_NAME}
 
-          IMAGE_NAME=ghcr.io/$GITHUB_USERNAME/house-price-model
-
-          echo "Building image: $IMAGE_NAME:$COMMIT_HASH"
+          echo "Building Docker image: $IMAGE:$COMMIT_HASH"
 
           docker build \
-            -t $IMAGE_NAME:$COMMIT_HASH \
+            -t $IMAGE:$COMMIT_HASH \
             -f src/api/Dockerfile \
             .
 
@@ -249,14 +249,12 @@ jobs:
         run: |
           COMMIT_HASH=$(echo "${{ github.sha }}" | cut -c1-7)
 
-          GITHUB_USERNAME=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-
-          IMAGE_NAME=ghcr.io/$GITHUB_USERNAME/house-price-model
+          IMAGE=ghcr.io/${DOCKER_USERNAME}/${IMAGE_NAME}
 
           docker run -d \
             -p 8000:8000 \
             --name test-api \
-            $IMAGE_NAME:$COMMIT_HASH
+            $IMAGE:$COMMIT_HASH
 
       - name: Check API health
         run: |
@@ -268,14 +266,12 @@ jobs:
             fi
 
             echo "Waiting for API..."
-
             sleep 5
           done
 
           echo "API health check failed"
 
           docker logs test-api
-
           exit 1
 
       - name: Check container logs
@@ -289,9 +285,9 @@ jobs:
           docker stop test-api || true
           docker rm test-api || true
 
-      # -----------------------------------------
-      # LOGIN TO GITHUB CONTAINER REGISTRY
-      # -----------------------------------------
+      # -------------------------------------
+      # GHCR LOGIN
+      # -------------------------------------
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -300,25 +296,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # -----------------------------------------
+      # -------------------------------------
       # PUSH DOCKER IMAGE
-      # -----------------------------------------
+      # -------------------------------------
 
       - name: Push Docker image to GHCR
         run: |
           COMMIT_HASH=$(echo "${{ github.sha }}" | cut -c1-7)
 
-          GITHUB_USERNAME=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE=ghcr.io/${DOCKER_USERNAME}/${IMAGE_NAME}
 
-          IMAGE_NAME=ghcr.io/$GITHUB_USERNAME/house-price-model
+          echo "Pushing Docker image: $IMAGE"
 
-          # Tag image as latest
           docker tag \
-            $IMAGE_NAME:$COMMIT_HASH \
-            $IMAGE_NAME:latest
+            $IMAGE:$COMMIT_HASH \
+            $IMAGE:latest
 
-          # Push commit-specific image
-          docker push $IMAGE_NAME:$COMMIT_HASH
+          docker push $IMAGE:$COMMIT_HASH
 
-          # Push latest image
-          docker push $IMAGE_NAME:latest
+          docker push $IMAGE:latest
