@@ -149,12 +149,14 @@ jobs:
     - name: Build and test Docker image
       run: |
         COMMIT_HASH=$(echo ${{ github.sha }} | cut -c1-7)
-
-        # Convert GitHub repository owner to lowercase
         GITHUB_USERNAME=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
 
+        # Verify Dockerfile
+        ls -la src/api/
+        test -f src/api/Dockerfile
+
         # Build Docker image
-        docker build -t ghcr.io/$GITHUB_USERNAME/house-price-model:$COMMIT_HASH -f ./src/api/Dockerfile .
+        docker build -t ghcr.io/$GITHUB_USERNAME/house-price-model:$COMMIT_HASH -f src/api/Dockerfile .
 
         # Run Docker container
         docker run -d -p 8000:8000 --name test-api ghcr.io/$GITHUB_USERNAME/house-price-model:$COMMIT_HASH
@@ -181,9 +183,7 @@ jobs:
      
     - name: Push Docker image to GHCR
       run: |
-       COMMIT_HASH=$(echo ${{ github.sha }} | cut -c1-7)
-
-        # Convert repository owner to lowercase
+        COMMIT_HASH=$(echo ${{ github.sha }} | cut -c1-7)
         GITHUB_USERNAME=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
 
         # Tag image as latest
