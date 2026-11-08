@@ -3,194 +3,241 @@ name: MLOps Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
+    tags: ['v*.*.*']
   pull_request:
-    branches: [ main ]
+    branches: [main]
   schedule:
-    - cron: '0 0 * * 0'  # Run weekly on Sundays
+    - cron: '0 0 * * 0' # Weekly, Sundays 00:00 UTC
   workflow_dispatch:
     inputs:
       run_all:
         description: 'Run all jobs'
         required: false
-        default: 'false'
+        type: boolean
+        default: false
       run_data_processing:
         description: 'Run data processing job'
         required: false
-        default: 'false'
+        type: boolean
+        default: false
       run_model_training:
         description: 'Run model training job'
         required: false
-        default: 'true'
+        type: boolean
+        default: true
       run_build_and_publish:
         description: 'Run build and publish job'
         required: false
-        default: 'true'
+        type: boolean
+        default: true
   release:
     types: [created]
-    branches: [ main ]
-    tags: [ 'v*.*.*' ]
 
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: '3.11'
 
 jobs:
   data-processing:
     runs-on: ubuntu-latest
-    
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      inputs.run_all || inputs.run_data_processing
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip setuptools wheel
-        pip install -r requirements.txt
-        pip install pytest pytest-cov
-  
-    - name: Process data
-      run: |
-        python src/data/run_processing.py --input data/raw/house_data.csv --output data/processed/cleaned_house_data.csv 
-        
-    - name: Engineer features
-      run: |
-        python src/features/engineer.py --input data/processed/cleaned_house_data.csv --output data/processed/featured_house_data.csv --preprocessor models/trained/preprocessor.pkl
-        
-    - name: Upload processed data
-      uses: actions/upload-artifact@v4
-      with:
-        name: processed-data
-        path: data/processed/featured_house_data.csv
-        
-    - name: Upload preprocessor
-      uses: actions/upload-artifact@v4
-      with:
-        name: preprocessor
-        path: models/trained/preprocessor.pkl
-        
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Process data
+        run: |
+          python src/data/run_processing.py \
+            --input data/raw/house_data.csv \
+            --output data/processed/cleaned_house_data.csv
+
+      - name: Engineer features
+        run: |
+          python src/features/engineer.py \
+            --input data/processed/cleaned_house_data.csv \
+            --output data/processed/featured_house_data.csv \
+            --preprocessor models/trained/preprocessor.pkl
+
+      - name: Upload processed data
+        uses: actions/upload-artifact@v4
+        with:
+          name: processed-data
+          path: data/processed/featured_house_data.csv
+
+      - name: Upload preprocessor
+        uses: actions/upload-artifact@v4
+        with:
+          name: preprocessor
+          path: models/trained/preprocessor.pkl
+
   model-training:
     needs: data-processing
     runs-on: ubuntu-latest
-    
+    if: >-
+      always() &&
+      needs.data-processing.result != 'failure' &&
+      needs.data-processing.result != 'cancelled' &&
+      (github.event_name != 'workflow_dispatch' ||
+       inputs.run_all || inputs.run_model_training)
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip setuptools wheel
-        pip install -r requirements.txt
-        pip install pytest pytest-cov
-      
-    - name: Download processed data
-      uses: actions/download-artifact@v4
-      with:
-        name: processed-data
-        path: data/processed/
-        
-    - name: Set up MLflow
-      run: |
-        docker pull ghcr.io/mlflow/mlflow:latest
-        docker run -d -p 5000:5000 --name mlflow-server ghcr.io/mlflow/mlflow:latest mlflow server --host 0.0.0.0 --backend-store-uri sqlite:///mlflow.db
-        
-    - name: Wait for MLflow to start
-      run: |
-        for i in {1..10}; do
-          curl -f http://localhost:5000/health || sleep 5;
-        done
-        
-    - name: Train model
-      run: |
-        mkdir -p models
-        python src/models/train_model.py --config configs/model_config.yaml --data data/processed/featured_house_data.csv --models-dir models --mlflow-tracking-uri http://localhost:5000
-        
-    - name: Upload trained model
-      uses: actions/upload-artifact@v4
-      with:
-        name: trained-model
-        path: models/
-        
-    - name: Clean up MLflow
-      run: |
-        docker stop mlflow-server || true
-        docker rm mlflow-server || true
-        
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Download processed data
+        uses: actions/download-artifact@v4
+        with:
+          name: processed-data
+          path: data/processed/
+
+      - name: Start MLflow server
+        run: |
+          docker pull ghcr.io/mlflow/mlflow:latest
+          docker run -d -p 5000:5000 --name mlflow-server \
+            ghcr.io/mlflow/mlflow:latest \
+            mlflow server --host 0.0.0.0 --backend-store-uri sqlite:///mlflow.db
+
+      - name: Wait for MLflow to start
+        run: |
+          for i in $(seq 1 10); do
+            if curl -fs http://localhost:5000/health; then
+              echo "MLflow is up"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "MLflow failed to start"
+          docker logs mlflow-server
+          exit 1
+
+      - name: Train model
+        run: |
+          mkdir -p models
+          python src/models/train_model.py \
+            --config configs/model_config.yaml \
+            --data data/processed/featured_house_data.csv \
+            --models-dir models \
+            --mlflow-tracking-uri http://localhost:5000
+
+      - name: Upload trained model
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model
+          path: models/
+
+      - name: Clean up MLflow
+        if: always()
+        run: |
+          docker stop mlflow-server || true
+          docker rm mlflow-server || true
+
   build-and-publish:
     needs: model-training
     runs-on: ubuntu-latest
-    
+    if: >-
+      always() &&
+      needs.model-training.result == 'success' &&
+      (github.event_name != 'workflow_dispatch' ||
+       inputs.run_all || inputs.run_build_and_publish)
+    permissions:
+      contents: read
+      packages: write # Required to push to GHCR with GITHUB_TOKEN
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
-      
-    - name: Download trained model
-      uses: actions/download-artifact@v4
-      with:
-        name: trained-model
-        path: models/
-        
-    - name: Download preprocessor
-      uses: actions/download-artifact@v4
-      with:
-        name: preprocessor
-        path: models/trained/
-        
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v1
-      
-    - name: Build and test Docker image
-      run: |
-        COMMIT_HASH=$(echo ${{ github.sha }} | cut -c1-7)
-        GITHUB_USERNAME=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-        # Verify Dockerfile
-        ls -la src/api/
-        test -f src/api/Dockerfile
+      - name: Download trained model
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-model
+          path: models/
 
-        # Build Docker image
-        docker build -t ghcr.io/$GITHUB_USERNAME/house-price-model:$COMMIT_HASH -f src/api/Dockerfile .
+      - name: Download preprocessor
+        uses: actions/download-artifact@v4
+        with:
+          name: preprocessor
+          path: models/trained/
 
-        # Run Docker container
-        docker run -d -p 8000:8000 --name test-api ghcr.io/$GITHUB_USERNAME/house-price-model:$COMMIT_HASH
+      - name: Set image name
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          COMMIT_HASH=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "IMAGE=ghcr.io/${OWNER}/house-price-model" >> "$GITHUB_ENV"
+          echo "TAG=${COMMIT_HASH}" >> "$GITHUB_ENV"
 
-        # Check API health
-        for i in {1..10}; do
-          curl -f http://localhost:8000/health && break || sleep 5
-        done
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-        # Check container logs
-        docker logs test-api
+      - name: Build image
+        run: |
+          test -f src/api/Dockerfile
+          docker build -t "$IMAGE:$TAG" -f src/api/Dockerfile .
 
-    - name: Clean up Test Container
-      run: |
-        docker stop test-api || true
-        docker rm test-api || true
-      
-    - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v2
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-     
-    - name: Push Docker image to GHCR
-      run: |
-        COMMIT_HASH=$(echo ${{ github.sha }} | cut -c1-7)
-        # GITHUB_USERNAME=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+      - name: Test image
+        run: |
+          docker run -d -p 8000:8000 --name test-api "$IMAGE:$TAG"
 
-        # Tag image as latest
-        docker tag ghcr.io/house-price-model:$COMMIT_HASH ghcr.io/house-price-model:latest
+          for i in $(seq 1 10); do
+            if curl -fs http://localhost:8000/health; then
+              echo "API is healthy"
+              break
+            fi
+            if [ "$i" -eq 10 ]; then
+              echo "API health check failed"
+              docker logs test-api
+              exit 1
+            fi
+            sleep 5
+          done
 
-        # Push commit-specific image
-        docker push ghcr.io/house-price-model:$COMMIT_HASH
+      - name: Clean up test container
+        if: always()
+        run: |
+          docker stop test-api || true
+          docker rm test-api || true
 
-        # Push latest image
-        docker push ghcr.io/house-price-model:latest
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        run: |
+          docker push "$IMAGE:$TAG"
+
+          # Also tag and push as latest
+          docker tag "$IMAGE:$TAG" "$IMAGE:latest"
+          docker push "$IMAGE:latest"
